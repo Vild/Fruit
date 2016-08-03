@@ -1,0 +1,23 @@
+#+TITLE:     Fruit
+#+AUTHOR:    Dan Printzell
+#+EMAIL:     me@vild.io
+#+DATE:      <2016-08-03 Wed>
+#+DESCRIPTION: A game project made for learning Vulkan
+#+KEYWORDS: 
+#+LANGUAGE:  en
+#+EXPORT_SELECT_TAGS: export
+#+EXPORT_EXCLUDE_TAGS: noexport
+
+* Desciption
+I'm using [[https://vulkan-tutorial.com/][Vulkan-Tutorial.com]] to learning Vulkan.
+Most of the code will be heavily based on that tutorial.
+
+* Goal
+- Learn Vulkan via writing a small game.
+- Implement Vulkan into the [[https://github.com/TeamAvocado/Avocado][Avocado 3D Engine]].
+
+* Authors
+- Dan Printzell
+
+* License
+Mozilla Public License Version 2
