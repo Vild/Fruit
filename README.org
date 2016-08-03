@@ -9,11 +9,12 @@
 #+EXPORT_EXCLUDE_TAGS: noexport
 
 * Desciption
-I'm using [[https://vulkan-tutorial.com/][Vulkan-Tutorial.com]] to learning Vulkan.
-Most of the code will be heavily based on that tutorial.
+I'm using [[https://vulkan-tutorial.com/][Vulkan-Tutorial.com]] to learn Vulkan,
+and most of the code found within this project, is likely to be heavily based
+upon it.
 
 * Goal
-- Learn Vulkan via writing a small game.
+- Learn Vulkan through the writing of a small game.
 - Implement Vulkan into the [[https://github.com/TeamAvocado/Avocado][Avocado 3D Engine]].
 
 * Authors
