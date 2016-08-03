@@ -1,5 +1,6 @@
 module fruit.engine;
 
+import std.stdio;
 import std.string;
 import std.exception;
 import std.datetime;
@@ -36,10 +37,17 @@ public:
 						quit = true;
 				} else if (e.type == SDL_WINDOWEVENT) {
 					if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
-						import fruit.linalg;
-						window.Size = vec2u(e.window.data1, e.window.data2);
+						window.Size.x = e.window.data1;
+						window.Size.y = e.window.data2;
 						vulkan.RecreateRendering();
+					} else if (e.window.event == SDL_WINDOWEVENT_HIDDEN) {
+						writeln("Window minimized");
+						render = false;
+					} else if (e.window.event == SDL_WINDOWEVENT_EXPOSED) {
+						writeln("Window restored");
+						render = true;
 					}
+
 				}
 			});
 
@@ -60,6 +68,9 @@ public:
 				fps = 0;
 				fpsTime += (1000 / FPS_PRINTING_PER_SECOND).msecs;
 			}
+
+			if (!render)
+				Thread.sleep(100.msecs);
 		}
 		return 0;
 	}
@@ -68,6 +79,7 @@ private:
 	Window window;
 	Vulkan vulkan;
 	bool quit;
+	bool render;
 
 	enum FPS_PRINTING_PER_SECOND = 2;
 }
