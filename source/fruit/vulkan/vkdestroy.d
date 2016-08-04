@@ -1,4 +1,4 @@
-module fruit.vkdestroy;
+module fruit.vulkan.vkdestroy;
 
 import erupted;
 
@@ -37,10 +37,10 @@ struct VkDestroy(T) {
 	}
 
 	void Clear() {
-		if (obj != VK_NULL_HANDLE && destroyer.funcptr)
+		if (obj && destroyer.funcptr)
 			destroyer();
 
-		obj = VK_NULL_HANDLE;
+		obj = null;
 	}
 
 	@property T* Ptr() {
@@ -50,7 +50,7 @@ struct VkDestroy(T) {
 
 	T obj;
 private:
-	alias genericDestroyer = void delegate() nothrow @nogc;
+	alias genericDestroyer = void delegate();
 	alias defaultDestroyer = extern (C) void function(T, const(VkAllocationCallbacks)*) nothrow @nogc;
 	alias instanceDestroyer = extern (C) void function(VkInstance, T, const(VkAllocationCallbacks)*) nothrow @nogc;
 	alias deviceDestroyer = extern (C) void function(VkDevice, T, const(VkAllocationCallbacks)*) nothrow @nogc;

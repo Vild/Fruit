@@ -1,8 +1,8 @@
-module fruit.window;
+module fruit.other.window;
 
 import std.string;
 public import derelict.sdl2.sdl;
-import fruit.linalg;
+import fruit.other.linalg;
 
 shared static this() {
 	DerelictSDL2.load();

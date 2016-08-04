@@ -8,8 +8,8 @@ import std.datetime;
 import core.thread;
 import core.time;
 
-import fruit.window;
-import fruit.vulkan;
+import fruit.other.window;
+import fruit.vulkan.vulkan;
 
 class Engine {
 public:
@@ -60,8 +60,6 @@ public:
 			fps++;
 
 			if ((curTime - fpsTime).total!"msecs" >= 1000 / FPS_PRINTING_PER_SECOND) {
-				import std.stdio;
-
 				fps *= FPS_PRINTING_PER_SECOND;
 				writeln("FPS: ", (fps + oldFps) / 2.0);
 				oldFps = fps;

@@ -1,4 +1,4 @@
-module fruit.linalg;
+module fruit.other.linalg;
 
 public import gl3n.linalg;
 

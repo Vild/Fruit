@@ -1,21 +1,37 @@
-module fruit.vulkan;
+module fruit.vulkan.vulkan;
 
 import std.stdio;
 import std.string;
 import std.exception;
 import std.algorithm;
 
-import fruit.window;
-import fruit.x11xcb;
-import fruit.io;
-import fruit.vkdestroy;
+import fruit.other.window;
+import fruit.other.x11xcb;
+import fruit.other.io;
+import fruit.other.linalg;
+import fruit.vulkan.vkdestroy;
+import fruit.vulkan.vertex;
+import fruit.vulkan.buffer;
 
 import erupted;
 
 enum ENGINE_NAME = "Avocado";
 enum ENGINE_VERSION = VK_MAKE_VERSION(1, 0, 0);
 
-private void enforceVK(VkResult res) {
+//dfmt off
+immutable Vertex[] vertices = [
+	Vertex(vec3(-0.5f, -0.5f, 0.0f), vec3(1.0f, 0.0f, 0.0f)),
+	Vertex(vec3(0.5f, -0.5f, 0.0f), vec3(0.0f, 1.0f, 0.0f)),
+	Vertex(vec3(0.5f, 0.5f, 0.0f), vec3(0.0f, 0.0f, 1.0f)),
+	Vertex(vec3(-0.5f, 0.5f, 0.0f), vec3(1.0f, 1.0f, 1.0f))
+];
+immutable ushort[] indices = [
+	0, 1, 2,
+	2, 3, 0
+];
+//dfmt on
+
+void enforceVK(VkResult res) {
 	import std.conv : to;
 
 	enforce(res == VkResult.VK_SUCCESS, res.to!string);
@@ -44,6 +60,8 @@ public:
 		createGraphicsPipeline();
 		createFramebuffers();
 		createCommandPool();
+		createVertexBuffer();
+		createIndexBuffer();
 		createCommandBuffers();
 		createSemaphores();
 	}
@@ -114,6 +132,22 @@ public:
 		RenderFrame();
 	}
 
+	@property ref VkPhysicalDevice PhysDevice() {
+		return physDevice;
+	}
+
+	@property ref VkDestroy!VkDevice Device() {
+		return device;
+	}
+
+	@property ref VkDestroy!VkCommandPool CommandPool() {
+		return commandPool;
+	}
+
+	@property ref VkQueue GraphicsQueue() {
+		return graphicsQueue;
+	}
+
 private:
 	struct swapChainSupportDetails {
 		VkSurfaceCapabilitiesKHR capabilities;
@@ -151,6 +185,10 @@ private:
 	VkDestroy!(VkFramebuffer[]) swapChainFramebuffers;
 
 	VkDestroy!VkCommandPool commandPool;
+
+	VkDestroy!Buffer vertexBuffer;
+	VkDestroy!Buffer indexBuffer;
+
 	VkDestroy!(VkCommandBuffer[]) commandBuffers;
 
 	VkDestroy!VkSemaphore imageAvailableSemaphore;
@@ -182,6 +220,10 @@ private:
 		});
 
 		commandPool.__ctor(device, vkDestroyCommandPool);
+
+		vertexBuffer.__ctor(() { vertexBuffer.obj.destroy; });
+		indexBuffer.__ctor(() { indexBuffer.obj.destroy; });
+
 		commandBuffers.__ctor(() {
 			if (commandBuffers.length)
 				vkFreeCommandBuffers(device, commandPool, cast(uint)commandBuffers.length, commandBuffers.ptr);
@@ -644,13 +686,15 @@ private:
 
 		VkPipelineShaderStageCreateInfo[] shaderStages = [vertShaderStageInfo, fragShaderStageInfo];
 
+		VkVertexInputBindingDescription bindingDescription = Vertex.getBindingDescription();
+		VkVertexInputAttributeDescription[] attributeDescriptions = Vertex.getAttributeDescriptions();
 		//dfmt off
 		VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
 			//flags,
-			vertexBindingDescriptionCount: 0,
-			pVertexBindingDescriptions: null,
-			vertexAttributeDescriptionCount: 0,
-			pVertexAttributeDescriptions: null
+			vertexBindingDescriptionCount: 1,
+			pVertexBindingDescriptions: &bindingDescription,
+			vertexAttributeDescriptionCount: cast(uint)attributeDescriptions.length,
+			pVertexAttributeDescriptions: attributeDescriptions.ptr
 		};
 
 		VkPipelineInputAssemblyStateCreateInfo inputAssembly = {
@@ -793,6 +837,46 @@ private:
 		vkCreateCommandPool(device, &poolInfo, null, commandPool.Ptr).enforceVK;
 	}
 
+	void createVertexBuffer() {
+		import std.c.string : memcpy;
+
+		VkDeviceSize size = vertices.length * Vertex.sizeof;
+
+		Buffer stagingBuffer = new Buffer(this, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		scope (exit)
+			stagingBuffer.destroy;
+
+		void* data = stagingBuffer.Map();
+		memcpy(data, vertices.ptr, size);
+		stagingBuffer.Unmap();
+
+		vertexBuffer = new Buffer(this, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+		stagingBuffer.CopyTo(vertexBuffer, size);
+	}
+
+	void createIndexBuffer() {
+		import std.c.string : memcpy;
+
+		VkDeviceSize size = indices.length * typeof(indices[0]).sizeof;
+
+		Buffer stagingBuffer = new Buffer(this, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		scope (exit)
+			stagingBuffer.destroy;
+
+		void* data = stagingBuffer.Map();
+		memcpy(data, indices.ptr, size);
+		stagingBuffer.Unmap();
+
+		indexBuffer = new Buffer(this, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+		stagingBuffer.CopyTo(indexBuffer, size);
+	}
+
 	void createCommandBuffers() {
 		commandBuffers.length = swapChainFramebuffers.length;
 
@@ -828,9 +912,17 @@ private:
 				pClearValues: &clearColor
 			};
 			//dfmt on
+
 			vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-			vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+			VkBuffer[] vertexBuffers = [vertexBuffer.Buffer];
+			VkDeviceSize[] offsets = [0];
+			vkCmdBindVertexBuffers(commandBuffer, 0, cast(uint)vertexBuffers.length, vertexBuffers.ptr, offsets.ptr);
+			vkCmdBindIndexBuffer(commandBuffer, indexBuffer.Buffer, 0, VK_INDEX_TYPE_UINT16);
+
+			vkCmdDrawIndexed(commandBuffer, cast(uint)indices.length, 1, 0, 0, 0);
+
 			vkCmdEndRenderPass(commandBuffer);
 			vkEndCommandBuffer(commandBuffer).enforceVK;
 		}

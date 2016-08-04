@@ -1,4 +1,4 @@
-module fruit.io;
+module fruit.other.io;
 
 import std.stdio;
 

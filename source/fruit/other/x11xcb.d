@@ -1,4 +1,4 @@
-module fruit.x11xcb;
+module fruit.other.x11xcb;
 
 import xcb.xcb;
 import derelict.util.loader;
