@@ -28,6 +28,7 @@ public:
 		MonoTime fpsTime = MonoTime.currTime;
 		ulong fps;
 		ulong oldFps;
+		double time = 0;
 		while (!quit) {
 			window.DoEvents((ref SDL_Event e) {
 				if (e.type == SDL_QUIT)
@@ -53,8 +54,22 @@ public:
 
 			immutable MonoTime curTime = MonoTime.currTime;
 			immutable Duration diff = curTime - oldTime;
-			immutable double delta = diff.total!"usecs" / 1_000_000; //1 000 000 µsec/ 1 sec
+			immutable double delta = diff.total!"usecs" / 1_000_000.0; //1 000 000 µsec/ 1 sec
 			oldTime = curTime;
+			time += delta;
+
+			{
+				import gl3n.math;
+				import fruit.other.linalg;
+
+				UniformBufferObject ubo;
+				ubo.model = mat4.zrotation(time * cradians!90).transposed;
+				ubo.view = mat4.look_at(vec3(2.0, 2.0, 2.0), vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, 1.0)).transposed;
+				ubo.proj = mat4.perspective(window.Size.x, window.Size.y, 45, 0.1f, 10.0f).transposed; // TODO: use swapChainExtent
+				ubo.proj[1][1] *= -1; // Because Y is inverted
+
+				vulkan.SetUBO(ubo);
+			}
 
 			vulkan.RenderFrame();
 			fps++;

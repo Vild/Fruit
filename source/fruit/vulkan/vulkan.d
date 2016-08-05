@@ -5,6 +5,8 @@ import std.string;
 import std.exception;
 import std.algorithm;
 
+import core.stdc.string : memcpy;
+
 import fruit.other.window;
 import fruit.other.x11xcb;
 import fruit.other.io;
@@ -30,6 +32,12 @@ immutable ushort[] indices = [
 	2, 3, 0
 ];
 //dfmt on
+
+struct UniformBufferObject {
+	mat4 model;
+	mat4 view;
+	mat4 proj;
+}
 
 void enforceVK(VkResult res) {
 	import std.conv : to;
@@ -57,17 +65,29 @@ public:
 		createSwapChain();
 		createImageViews();
 		createRenderPass();
+		createDescriptorSetLayout();
 		createGraphicsPipeline();
 		createFramebuffers();
 		createCommandPool();
 		createVertexBuffer();
 		createIndexBuffer();
+		createUniformBuffer();
+		createDescriptorPool();
+		createDescriptorSet();
 		createCommandBuffers();
 		createSemaphores();
 	}
 
 	~this() {
 		WaitForIdle();
+	}
+
+	void SetUBO(ref UniformBufferObject ubo) {
+		void* mem = uniformStagingBuffer.Map();
+		memcpy(mem, &ubo, UniformBufferObject.sizeof);
+		uniformStagingBuffer.Unmap();
+
+		uniformStagingBuffer.CopyTo(uniformBuffer, UniformBufferObject.sizeof);
 	}
 
 	void RenderFrame() {
@@ -179,6 +199,8 @@ private:
 
 	VkDestroy!VkRenderPass renderPass;
 
+	VkDestroy!VkDescriptorSetLayout descriptorSetLayout;
+
 	VkDestroy!VkPipelineLayout pipelineLayout;
 	VkDestroy!VkPipeline graphicsPipeline;
 
@@ -188,6 +210,11 @@ private:
 
 	VkDestroy!Buffer vertexBuffer;
 	VkDestroy!Buffer indexBuffer;
+	VkDestroy!Buffer uniformStagingBuffer;
+	VkDestroy!Buffer uniformBuffer;
+
+	VkDestroy!VkDescriptorPool descriptorPool;
+	VkDescriptorSet descriptorSet;
 
 	VkDestroy!(VkCommandBuffer[]) commandBuffers;
 
@@ -201,8 +228,8 @@ private:
 		device.__ctor(vkDestroyDevice);
 		swapChain.__ctor(device, vkDestroySwapchainKHR);
 
-		swapChainImageViews.__ctor(() {
-			foreach (imageView; swapChainImageViews)
+		swapChainImageViews.__ctor((obj) {
+			foreach (imageView; obj)
 				vkDestroyImageView(device, imageView, null);
 		});
 
@@ -211,22 +238,28 @@ private:
 
 		renderPass.__ctor(device, vkDestroyRenderPass);
 
+		descriptorSetLayout.__ctor(device, vkDestroyDescriptorSetLayout);
+
 		pipelineLayout.__ctor(device, vkDestroyPipelineLayout);
 		graphicsPipeline.__ctor(device, vkDestroyPipeline);
 
-		swapChainFramebuffers.__ctor(() {
-			foreach (frameBuffer; swapChainFramebuffers)
+		swapChainFramebuffers.__ctor((obj) {
+			foreach (frameBuffer; obj)
 				vkDestroyFramebuffer(device, frameBuffer, null);
 		});
 
 		commandPool.__ctor(device, vkDestroyCommandPool);
 
-		vertexBuffer.__ctor(() { vertexBuffer.obj.destroy; });
-		indexBuffer.__ctor(() { indexBuffer.obj.destroy; });
+		vertexBuffer.__ctor((obj) { obj.destroy; });
+		indexBuffer.__ctor((obj) { obj.destroy; });
+		uniformStagingBuffer.__ctor((obj) { obj.destroy; });
+		uniformBuffer.__ctor((obj) { obj.destroy; });
 
-		commandBuffers.__ctor(() {
-			if (commandBuffers.length)
-				vkFreeCommandBuffers(device, commandPool, cast(uint)commandBuffers.length, commandBuffers.ptr);
+		descriptorPool.__ctor(device, vkDestroyDescriptorPool);
+
+		commandBuffers.__ctor((obj) {
+			if (obj.length)
+				vkFreeCommandBuffers(device, commandPool, cast(uint)obj.length, obj.ptr);
 		});
 
 		renderFinishedSemaphore.__ctor(device, vkDestroySemaphore);
@@ -450,7 +483,7 @@ private:
 				continue;
 			if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
 				graphicsFamily = i;
-			/*else*/{ //TODO: Research if they can be the same queue family
+			/*else*/{ //TODO: Research why they can't be on different queue family
 				VkBool32 presentSupport = false;
 				vkGetPhysicalDeviceSurfaceSupportKHR(physDevice, i, surface, &presentSupport).enforceVK;
 				if (presentSupport)
@@ -664,6 +697,25 @@ private:
 		vkCreateRenderPass(device, &renderPassInfo, null, renderPass.Ptr).enforceVK;
 	}
 
+	void createDescriptorSetLayout() {
+		//dfmt off
+		VkDescriptorSetLayoutBinding uboLayoutBinding = {
+			binding: 0,
+			descriptorType: VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			descriptorCount: 1,
+			stageFlags: VK_SHADER_STAGE_VERTEX_BIT,
+			pImmutableSamplers: null
+		};
+
+		VkDescriptorSetLayoutCreateInfo layoutInfo = {
+			bindingCount: 1,
+			pBindings: &uboLayoutBinding
+		};
+		//dfmt on
+
+		vkCreateDescriptorSetLayout(device, &layoutInfo, null, descriptorSetLayout.Ptr).enforceVK;
+	}
+
 	void createGraphicsPipeline() {
 		auto vertShaderCode = readFile("res/shader/generic.vert.spv");
 		auto fragShaderCode = readFile("res/shader/generic.frag.spv");
@@ -729,7 +781,7 @@ private:
 			polygonMode: VK_POLYGON_MODE_FILL,
 			lineWidth: 1.0f,
 			cullMode: VK_CULL_MODE_BACK_BIT,
-			frontFace: VK_FRONT_FACE_CLOCKWISE,
+			frontFace: VK_FRONT_FACE_COUNTER_CLOCKWISE,
 
 			depthBiasEnable: VK_FALSE,
 			depthBiasConstantFactor: 0.0f, // Optional
@@ -773,9 +825,11 @@ private:
 			pDynamicStates: dynamicStates
 		};+/
 
+		VkDescriptorSetLayout[] setLayouts = [descriptorSetLayout];
+
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo = {
-			setLayoutCount: 0, // Optional
-			pSetLayouts: null, // Optional
+			setLayoutCount: cast(uint)setLayouts.length,
+			pSetLayouts: setLayouts.ptr,
 			pushConstantRangeCount: 0, // Optional
 			pPushConstantRanges: null // Optional
 		};
@@ -838,7 +892,6 @@ private:
 	}
 
 	void createVertexBuffer() {
-		import std.c.string : memcpy;
 
 		VkDeviceSize size = vertices.length * Vertex.sizeof;
 
@@ -858,8 +911,6 @@ private:
 	}
 
 	void createIndexBuffer() {
-		import std.c.string : memcpy;
-
 		VkDeviceSize size = indices.length * typeof(indices[0]).sizeof;
 
 		Buffer stagingBuffer = new Buffer(this, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -875,6 +926,66 @@ private:
 				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 		stagingBuffer.CopyTo(indexBuffer, size);
+	}
+
+	void createUniformBuffer() {
+		VkDeviceSize size = UniformBufferObject.sizeof;
+
+		uniformStagingBuffer = new Buffer(this, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		uniformBuffer = new Buffer(this, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	}
+
+	void createDescriptorPool() {
+		//dfmt off
+		VkDescriptorPoolSize poolSize = {
+			type: VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			descriptorCount: 1
+		};
+
+		VkDescriptorPoolCreateInfo poolInfo = {
+			poolSizeCount: 1,
+			pPoolSizes: &poolSize,
+			maxSets: 1
+		};
+		//dfmt on
+
+		vkCreateDescriptorPool(device, &poolInfo, null, descriptorPool.Ptr).enforceVK;
+	}
+
+	void createDescriptorSet() {
+		VkDescriptorSetLayout[] layouts = [descriptorSetLayout];
+		//dfmt off
+		VkDescriptorSetAllocateInfo allocInfo = {
+			descriptorPool: descriptorPool,
+			descriptorSetCount: 1,
+			pSetLayouts: layouts.ptr
+		};
+		//dfmt on
+
+		vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet).enforceVK;
+
+		//dfmt off
+		VkDescriptorBufferInfo bufferInfo = {
+			buffer: uniformBuffer.Buffer,
+			offset: 0,
+			range: UniformBufferObject.sizeof
+		};
+
+		VkWriteDescriptorSet descriptorWrite = {
+			dstSet: descriptorSet,
+			dstBinding: 0,
+			dstArrayElement: 0,
+			descriptorType: VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			descriptorCount: 1,
+			pBufferInfo: &bufferInfo,
+			pImageInfo: null,
+			pTexelBufferView: null
+		};
+		//dfmt on
+
+		vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, null);
 	}
 
 	void createCommandBuffers() {
@@ -915,6 +1026,8 @@ private:
 
 			vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, null);
 
 			VkBuffer[] vertexBuffers = [vertexBuffer.Buffer];
 			VkDeviceSize[] offsets = [0];

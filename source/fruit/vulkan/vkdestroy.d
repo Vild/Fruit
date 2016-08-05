@@ -7,7 +7,7 @@ struct VkDestroy(T) {
 	alias obj this;
 
 	this(genericDestroyer d) {
-		destroyer = d;
+		destroyer = () => d(obj);
 	}
 
 	this(ref defaultDestroyer d) {
@@ -50,7 +50,7 @@ struct VkDestroy(T) {
 
 	T obj;
 private:
-	alias genericDestroyer = void delegate();
+	alias genericDestroyer = void delegate(T);
 	alias defaultDestroyer = extern (C) void function(T, const(VkAllocationCallbacks)*) nothrow @nogc;
 	alias instanceDestroyer = extern (C) void function(VkInstance, T, const(VkAllocationCallbacks)*) nothrow @nogc;
 	alias deviceDestroyer = extern (C) void function(VkDevice, T, const(VkAllocationCallbacks)*) nothrow @nogc;

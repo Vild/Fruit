@@ -3,7 +3,9 @@ GENERIC_FRAG := generic.frag.spv
 
 GENERIC = $(GENERIC_VERT) $(GENERIC_FRAG)
 
+.PHONY: ALWAYS
+
 all: $(GENERIC)
 
-%.spv: %
-	glslangValidator -V $^ -o $@
+%.spv: % ALWAYS
+	glslangValidator -V $* -o $@
