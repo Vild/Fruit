@@ -95,8 +95,7 @@ public:
 		uint imageIndex;
 		VkResult r = vkAcquireNextImageKHR(device, swapChain, ulong.max, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
 		if (r == VK_ERROR_OUT_OF_DATE_KHR) {
-			RecreateRendering();
-			return RenderFrame();
+			return RecreateRendering();
 		} else if (r != VK_SUBOPTIMAL_KHR)
 			r.enforceVK;
 
@@ -344,6 +343,18 @@ private:
 				//dfmt on
 
 				vkCreateXcbSurfaceKHR(instance, &createInfo, null, surface.Ptr).enforceVK;
+				break;
+			}
+			version (Have_xlib_d) {
+		case SDL_SYSWM_XLIB:
+				//dfmt off
+				VkXlibSurfaceCreateInfoKHR createInfo = {
+					dpy: wminfo.info.x11.display,
+					window: wminfo.info.x11.window
+				};
+				//dfmt on
+
+				vkCreateXlibSurfaceKHR(instance, &createInfo, null, surface.Ptr).enforceVK;
 				break;
 			}
 		default:
